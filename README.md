@@ -111,8 +111,10 @@ You can either start the policy from pretrained checkpoints or from scratch by s
 
 ### Play the learned model-based policy
 
+You can play the learned policies with the original Isaac Lab task registry.
+
 ```bash
-python scripts/reinforcement_learning/rsl_rl/play.py --task=Template-Isaac-Velocity-Flat-Anymal-D-Play-v0 --headless --load_run <run_name>
+python scripts/reinforcement_learning/rsl_rl/play.py --task=Isaac-Velocity-Flat-Anymal-D-Play-v0 --headless --load_run <run_name>
 ```
 
 ## Code Structure
