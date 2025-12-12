@@ -54,7 +54,7 @@ python -m pip install -e source/mbrl
 5. **Verify the installation**
 
 ```bash
-python scripts/reinforcement_learning/rsl_rl/train.py --task=Template-Isaac-Velocity-Flat-Anymal-D-Init-v0 --headless
+python scripts/reinforcement_learning/rsl_rl/train.py --task Template-Isaac-Velocity-Flat-Anymal-D-Init-v0 --headless
 ```
 
 ---
@@ -79,7 +79,7 @@ Available components:
 
 ```bash
 python scripts/reinforcement_learning/rsl_rl/train.py \
-  --task=Template-Isaac-Velocity-Flat-Anymal-D-Pretrain-v0 \
+  --task Template-Isaac-Velocity-Flat-Anymal-D-Pretrain-v0 \
   --headless
 ```
 
@@ -89,11 +89,14 @@ It trains a PPO policy from scratch, while the induced experience during trainin
 
 ```bash
 python scripts/reinforcement_learning/rsl_rl/visualize.py \
-  --task=Template-Isaac-Velocity-Flat-Anymal-D-Visualize-v0 \
+  --task Template-Isaac-Velocity-Flat-Anymal-D-Visualize-v0 \
   --headless \
   --load_run <run_name> \
   --system_dynamics_load_path <dynamics_model_path>
 ```
+
+It visualizes the learned dynamics model by rolling out the model autoregressively in imagination, conditioned on the actions from the learned policy.
+The `dynamics_model_path` should point to the pretrained dynamics model checkpoint (e.g. `model_<iteration>.pt`) inside the saved run directory.
 
 ---
 
@@ -104,7 +107,7 @@ Once a dynamics model is pretrained, you can train a model-based policy purely f
 ### Train policy in imagination
 
 ```bash
-python scripts/reinforcement_learning/rsl_rl/train.py --task=Template-Isaac-Velocity-Flat-Anymal-D-Finetune-v0 --headless --load_run <run_name> --system_dynamics_load_path <dynamics_model_path>
+python scripts/reinforcement_learning/rsl_rl/train.py --task Template-Isaac-Velocity-Flat-Anymal-D-Finetune-v0 --headless --load_run <run_name> --system_dynamics_load_path <dynamics_model_path>
 ```
 
 You can either start the policy from pretrained checkpoints or from scratch by simply omitting the `--load_run` argument.
@@ -114,7 +117,7 @@ You can either start the policy from pretrained checkpoints or from scratch by s
 You can play the learned policies with the original Isaac Lab task registry.
 
 ```bash
-python scripts/reinforcement_learning/rsl_rl/play.py --task=Isaac-Velocity-Flat-Anymal-D-Play-v0 --headless --load_run <run_name>
+python scripts/reinforcement_learning/rsl_rl/play.py --task Isaac-Velocity-Flat-Anymal-D-Play-v0 --headless --load_run <run_name>
 ```
 
 ## Code Structure
