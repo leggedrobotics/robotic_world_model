@@ -1,3 +1,8 @@
+"""速度任务自定义奖励项。
+
+补充站立姿态、关节偏差与足端离地等 Go2 任务常用奖励函数。
+"""
+
 from __future__ import annotations
 
 import torch
@@ -10,7 +15,10 @@ if TYPE_CHECKING:
 
 
 def joint_pos_stand_still(
-    env: ManagerBasedRLEnv, command_name: str, threshold: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    threshold: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
 ) -> torch.Tensor:
     """Penalize joint position error from default on the articulation."""
     # extract the used quantities (to enable type-hinting)
@@ -20,8 +28,21 @@ def joint_pos_stand_still(
     return torch.sum(torch.abs(asset.data.joint_pos - asset.data.default_joint_pos), dim=1) * (command < threshold)
 
 
+def joint_pos_deviation_l1(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize joint deviation from default posture for all commands."""
+    asset = env.scene[asset_cfg.name]
+    return torch.sum(torch.abs(asset.data.joint_pos - asset.data.default_joint_pos), dim=1)
+
+
 def foot_clearance(
-    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, target_height: float, std: float, tanh_mult: float
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    target_height: float,
+    std: float,
+    tanh_mult: float,
 ) -> torch.Tensor:
     """Reward the swinging feet for clearing a specified height off the ground"""
     asset = env.scene[asset_cfg.name]

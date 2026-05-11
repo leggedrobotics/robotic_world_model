@@ -1,10 +1,11 @@
+"""模板重命名工具脚本。
+
+用于将旧模板标识批量替换为新项目名（文件名、目录名与文件内容）。
+"""
+
 import os
 import sys
 from pathlib import Path
-
-"""This script can be used to rename the template project to a new project name.
-It renames all the occurrences of ext_template (in files, directories, etc.) to the new project name.
-"""
 
 
 def rename_file_contents(root_dir_path: str, old_name: str, new_name: str, exclude_dirs: list = []):
@@ -51,7 +52,8 @@ if __name__ == "__main__":
             os.path.join(root_dir_path, "source", "ext_template", new_name),
         )
         os.rename(
-            os.path.join(root_dir_path, "source", "ext_template"), os.path.join(root_dir_path, "source", new_name)
+            os.path.join(root_dir_path, "source", "ext_template"),
+            os.path.join(root_dir_path, "source", new_name),
         )
         os.rename(
             os.path.join(root_dir_path, "docker", ".env.ext_template.template"),

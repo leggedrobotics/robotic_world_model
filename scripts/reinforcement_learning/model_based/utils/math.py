@@ -3,7 +3,10 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Sub-module containing utilities for various math operations."""
+"""数学工具函数集合。
+
+提供归一化/反归一化、角度处理与常用张量数学操作。
+"""
 
 # needed to import for allowing type-hinting: torch.Tensor | np.ndarray
 from __future__ import annotations
@@ -458,7 +461,11 @@ def euler_xyz_from_quat(
 
     # pitch (y-axis rotation)
     sin_pitch = 2.0 * (q_w * q_y - q_z * q_x)
-    pitch = torch.where(torch.abs(sin_pitch) >= 1, copysign(torch.pi / 2.0, sin_pitch), torch.asin(sin_pitch))
+    pitch = torch.where(
+        torch.abs(sin_pitch) >= 1,
+        copysign(torch.pi / 2.0, sin_pitch),
+        torch.asin(sin_pitch),
+    )
 
     # yaw (z-axis rotation)
     sin_yaw = 2.0 * (q_w * q_z + q_x * q_y)
@@ -793,7 +800,10 @@ def is_identity_pose(pos: torch.tensor, rot: torch.tensor) -> bool:
 
 @torch.jit.script
 def combine_frame_transforms(
-    t01: torch.Tensor, q01: torch.Tensor, t12: torch.Tensor | None = None, q12: torch.Tensor | None = None
+    t01: torch.Tensor,
+    q01: torch.Tensor,
+    t12: torch.Tensor | None = None,
+    q12: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     r"""Combine transformations between two reference frames into a stationary frame.
 
@@ -865,7 +875,10 @@ def rigid_body_twist_transform(
 
 # @torch.jit.script
 def subtract_frame_transforms(
-    t01: torch.Tensor, q01: torch.Tensor, t02: torch.Tensor | None = None, q02: torch.Tensor | None = None
+    t01: torch.Tensor,
+    q01: torch.Tensor,
+    t02: torch.Tensor | None = None,
+    q02: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     r"""Subtract transformations between two reference frames into a stationary frame.
 
@@ -953,7 +966,10 @@ def compute_pose_error(
 
 @torch.jit.script
 def apply_delta_pose(
-    source_pos: torch.Tensor, source_rot: torch.Tensor, delta_pose: torch.Tensor, eps: float = 1.0e-6
+    source_pos: torch.Tensor,
+    source_rot: torch.Tensor,
+    delta_pose: torch.Tensor,
+    eps: float = 1.0e-6,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Applies delta pose transformation on source pose.
 
@@ -984,7 +1000,9 @@ def apply_delta_pose(
     # change from axis-angle to quat convention
     identity_quat = torch.tensor([1.0, 0.0, 0.0, 0.0], device=device).repeat(num_poses, 1)
     rot_delta_quat = torch.where(
-        angle.unsqueeze(-1).repeat(1, 4) > eps, quat_from_angle_axis(angle, axis), identity_quat
+        angle.unsqueeze(-1).repeat(1, 4) > eps,
+        quat_from_angle_axis(angle, axis),
+        identity_quat,
     )
     # TODO: Check if this is the correct order for this multiplication.
     target_rot = quat_mul(rot_delta_quat, source_rot)
@@ -994,7 +1012,9 @@ def apply_delta_pose(
 
 # @torch.jit.script
 def transform_points(
-    points: torch.Tensor, pos: torch.Tensor | None = None, quat: torch.Tensor | None = None
+    points: torch.Tensor,
+    pos: torch.Tensor | None = None,
+    quat: torch.Tensor | None = None,
 ) -> torch.Tensor:
     r"""Transform input points in a given frame to a target frame.
 
@@ -1393,7 +1413,10 @@ def sample_triangle(lower: float, upper: float, size: int | tuple[int, ...], dev
 
 
 def sample_uniform(
-    lower: torch.Tensor | float, upper: torch.Tensor | float, size: int | tuple[int, ...], device: str
+    lower: torch.Tensor | float,
+    upper: torch.Tensor | float,
+    size: int | tuple[int, ...],
+    device: str,
 ) -> torch.Tensor:
     """Sample uniformly within a range.
 
@@ -1414,7 +1437,10 @@ def sample_uniform(
 
 
 def sample_log_uniform(
-    lower: torch.Tensor | float, upper: torch.Tensor | float, size: int | tuple[int, ...], device: str
+    lower: torch.Tensor | float,
+    upper: torch.Tensor | float,
+    size: int | tuple[int, ...],
+    device: str,
 ) -> torch.Tensor:
     r"""Sample using log-uniform distribution within a range.
 
@@ -1445,7 +1471,10 @@ def sample_log_uniform(
 
 
 def sample_gaussian(
-    mean: torch.Tensor | float, std: torch.Tensor | float, size: int | tuple[int, ...], device: str
+    mean: torch.Tensor | float,
+    std: torch.Tensor | float,
+    size: int | tuple[int, ...],
+    device: str,
 ) -> torch.Tensor:
     """Sample using gaussian distribution.
 
@@ -1467,7 +1496,10 @@ def sample_gaussian(
 
 
 def sample_cylinder(
-    radius: float, h_range: tuple[float, float], size: int | tuple[int, ...], device: str
+    radius: float,
+    h_range: tuple[float, float],
+    size: int | tuple[int, ...],
+    device: str,
 ) -> torch.Tensor:
     """Sample 3D points uniformly on a cylinder's surface.
 
@@ -1565,7 +1597,10 @@ def convert_camera_frame_orientation_convention(
         rotm = matrix_from_quat(orientation)
         rotm = torch.matmul(
             rotm,
-            matrix_from_euler(torch.tensor([math.pi / 2, -math.pi / 2, 0], device=orientation.device), "XYZ"),
+            matrix_from_euler(
+                torch.tensor([math.pi / 2, -math.pi / 2, 0], device=orientation.device),
+                "XYZ",
+            ),
         )
         # convert to isaac-sim convention
         quat_gl = quat_from_matrix(rotm)
@@ -1584,7 +1619,10 @@ def convert_camera_frame_orientation_convention(
         rotm = matrix_from_quat(quat_gl)
         rotm = torch.matmul(
             rotm,
-            matrix_from_euler(torch.tensor([math.pi / 2, -math.pi / 2, 0], device=orientation.device), "XYZ").T,
+            matrix_from_euler(
+                torch.tensor([math.pi / 2, -math.pi / 2, 0], device=orientation.device),
+                "XYZ",
+            ).T,
         )
         return quat_from_matrix(rotm)
     else:
@@ -1917,15 +1955,27 @@ def generate_random_rotation(rot_boundary: float = (2 * math.pi)) -> torch.Tenso
     """
     angles = torch.rand(3) * rot_boundary
     Rx = torch.tensor(
-        [[1, 0, 0], [0, torch.cos(angles[0]), -torch.sin(angles[0])], [0, torch.sin(angles[0]), torch.cos(angles[0])]]
+        [
+            [1, 0, 0],
+            [0, torch.cos(angles[0]), -torch.sin(angles[0])],
+            [0, torch.sin(angles[0]), torch.cos(angles[0])],
+        ]
     )
 
     Ry = torch.tensor(
-        [[torch.cos(angles[1]), 0, torch.sin(angles[1])], [0, 1, 0], [-torch.sin(angles[1]), 0, torch.cos(angles[1])]]
+        [
+            [torch.cos(angles[1]), 0, torch.sin(angles[1])],
+            [0, 1, 0],
+            [-torch.sin(angles[1]), 0, torch.cos(angles[1])],
+        ]
     )
 
     Rz = torch.tensor(
-        [[torch.cos(angles[2]), -torch.sin(angles[2]), 0], [torch.sin(angles[2]), torch.cos(angles[2]), 0], [0, 0, 1]]
+        [
+            [torch.cos(angles[2]), -torch.sin(angles[2]), 0],
+            [torch.sin(angles[2]), torch.cos(angles[2]), 0],
+            [0, 0, 1],
+        ]
     )
 
     # Combined rotation matrix
@@ -1990,8 +2040,24 @@ def transformation_matrix_from_dh(
     transformation_matrices = torch.stack(
         [
             torch.stack([cos_theta, -sin_theta, zeros, a], dim=-1),
-            torch.stack([sin_theta * cos_alpha, cos_theta * cos_alpha, -sin_alpha, -d * sin_alpha], dim=-1),
-            torch.stack([sin_theta * sin_alpha, cos_theta * sin_alpha, cos_alpha, d * cos_alpha], dim=-1),
+            torch.stack(
+                [
+                    sin_theta * cos_alpha,
+                    cos_theta * cos_alpha,
+                    -sin_alpha,
+                    -d * sin_alpha,
+                ],
+                dim=-1,
+            ),
+            torch.stack(
+                [
+                    sin_theta * sin_alpha,
+                    cos_theta * sin_alpha,
+                    cos_alpha,
+                    d * cos_alpha,
+                ],
+                dim=-1,
+            ),
             torch.stack([zeros, zeros, zeros, ones], dim=-1),
         ],
         dim=-2,
