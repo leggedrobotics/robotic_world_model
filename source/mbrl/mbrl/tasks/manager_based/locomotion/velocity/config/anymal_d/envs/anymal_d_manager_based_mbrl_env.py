@@ -105,7 +105,11 @@ class ANYmalDManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
         joint_pos = parsed_imagination_states["joint_pos"]
         joint_vel = parsed_imagination_states["joint_vel"]
         joint_torque = parsed_imagination_states["joint_torque"]
-        joint_acc = (joint_vel - self.last_obs["policy"][:, 12:24]) / self.step_dt
+        # The policy observation stores joint positions at [12:24] and joint
+        # velocities at [24:36].  Acceleration must use the previous velocity,
+        # rather than the previous position, for the finite difference.
+        previous_joint_vel = self.last_obs["policy"][:, 24:36]
+        joint_acc = (joint_vel - previous_joint_vel) / self.step_dt
         thigh_contact = parsed_contacts["thigh_contact"]
         foot_contact = parsed_contacts["foot_contact"]
 
