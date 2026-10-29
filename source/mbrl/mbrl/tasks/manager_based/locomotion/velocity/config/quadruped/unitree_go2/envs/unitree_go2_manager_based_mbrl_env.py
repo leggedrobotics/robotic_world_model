@@ -3,7 +3,11 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-# needed to import for allowing type-hinting: np.ndarray | None
+"""Go2 的管理式 MBRL 环境实现。
+
+核心职责：解析动力学模型输出、构建想象观测、计算奖励并维护接触时序。
+"""
+
 from __future__ import annotations
 
 import torch
@@ -12,14 +16,11 @@ from tensordict import TensorDict
 from mbrl.mbrl.envs import ManagerBasedMBRLEnv
 
 
-class ANYmalDManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
-
-
+class UnitreeGo2ManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
     def _init_additional_attributes(self):
         self.default_joint_pos = self.scene["robot"].data.default_joint_pos[0]
         self.default_joint_vel = self.scene["robot"].data.default_joint_vel[0]
         self.base_velocity = None
-
 
     def _init_additional_imagination_attributes(self):
         self.last_air_time = torch.zeros(self.num_imagination_envs, 4, device=self.device)
@@ -27,14 +28,12 @@ class ANYmalDManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
         self.last_contact_time = torch.zeros(self.num_imagination_envs, 4, device=self.device)
         self.current_contact_time = torch.zeros(self.num_imagination_envs, 4, device=self.device)
 
-
     def _reset_additional_imagination_attributes(self, env_ids):
         self.last_air_time[env_ids] = 0.0
         self.current_air_time[env_ids] = 0.0
         self.last_contact_time[env_ids] = 0.0
         self.current_contact_time[env_ids] = 0.0
 
-    
     def get_imagination_observation(self, state_history, action_history, observation_noise=True):
         obs_base_lin_vel = self.imagination_state_normalizer.inverse(state_history[:, -1])[:, 0:3]
         obs_base_ang_vel = self.imagination_state_normalizer.inverse(state_history[:, -1])[:, 3:6]
@@ -48,11 +47,21 @@ class ANYmalDManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
             obs_projected_gravity += 2 * (torch.rand_like(obs_projected_gravity) - 0.5) * 0.05
             obs_joint_pos += 2 * (torch.rand_like(obs_joint_pos) - 0.5) * 0.01
             obs_joint_vel += 2 * (torch.rand_like(obs_joint_vel) - 0.5) * 1.5
-        obs = torch.cat([obs_base_lin_vel, obs_base_ang_vel, obs_projected_gravity, self.base_velocity, obs_joint_pos, obs_joint_vel, self.obs_last_action], dim=1)
+        obs = torch.cat(
+            [
+                obs_base_lin_vel,
+                obs_base_ang_vel,
+                obs_projected_gravity,
+                self.base_velocity,
+                obs_joint_pos,
+                obs_joint_vel,
+                self.obs_last_action,
+            ],
+            dim=1,
+        )
         obs = TensorDict({"policy": obs}, batch_size=[self.num_imagination_envs], device=self.device)
         self.last_obs = obs
         return obs
-    
 
     def _parse_imagination_states(self, imagination_states_denormalized):
         base_lin_vel = imagination_states_denormalized[:, 0:3]
@@ -61,6 +70,15 @@ class ANYmalDManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
         joint_pos = imagination_states_denormalized[:, 9:21]
         joint_vel = imagination_states_denormalized[:, 21:33]
         joint_torque = imagination_states_denormalized[:, 33:45]
+
+        # 限制动力学模型异常输出，避免可视化中将离群状态直接回写到仿真。
+        base_lin_vel[:, :2] = torch.clamp(base_lin_vel[:, :2], -3.0, 3.0)
+        base_lin_vel[:, 2] = torch.clamp(base_lin_vel[:, 2], -1.5, 1.5)
+        base_ang_vel = torch.clamp(base_ang_vel, -6.0, 6.0)
+        projected_gravity = torch.nn.functional.normalize(projected_gravity, dim=1, eps=1.0e-6)
+        joint_pos = torch.clamp(joint_pos, -1.2, 1.2)
+        joint_vel = torch.clamp(joint_vel, -30.0, 30.0)
+        joint_torque = torch.clamp(joint_torque, -80.0, 80.0)
 
         parsed_imagination_states = {
             "base_lin_vel": base_lin_vel,
@@ -72,33 +90,35 @@ class ANYmalDManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
         }
         return parsed_imagination_states
 
-    
     def _parse_extensions(self, extensions):
         if extensions is None:
             return None
-        parsed_extensions = {
-        }
+        parsed_extensions = {}
         return parsed_extensions
-
 
     def _parse_contacts(self, contacts):
         thigh_contact = torch.sigmoid(contacts[:, 0:4]).round() if contacts is not None else None
         foot_contact = torch.sigmoid(contacts[:, 4:8]).round() if contacts is not None else None
-        
+
         parsed_contacts = {
             "thigh_contact": thigh_contact,
             "foot_contact": foot_contact,
         }
         return parsed_contacts
-    
-    
+
     def _parse_terminations(self, terminations):
-        parsed_terminations = torch.sigmoid(terminations).squeeze(-1).round().bool() if terminations is not None else None
+        parsed_terminations = (
+            torch.sigmoid(terminations).squeeze(-1).round().bool() if terminations is not None else None
+        )
         return parsed_terminations
 
-
-    def _compute_imagination_reward_terms(self, parsed_imagination_states, rollout_action, parsed_extensions, parsed_contacts):
-        
+    def _compute_imagination_reward_terms(
+        self,
+        parsed_imagination_states,
+        rollout_action,
+        parsed_extensions,
+        parsed_contacts,
+    ):
         base_lin_vel = parsed_imagination_states["base_lin_vel"]
         base_ang_vel = parsed_imagination_states["base_ang_vel"]
         projected_gravity = parsed_imagination_states["projected_gravity"]
@@ -111,7 +131,7 @@ class ANYmalDManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
 
         lin_vel_error = torch.sum(torch.square(self.base_velocity[:, :2] - base_lin_vel[:, :2]), dim=1)
         ang_vel_error = torch.square(self.base_velocity[:, 2] - base_ang_vel[:, 2])
-        
+
         track_lin_vel_xy_exp = torch.exp(-lin_vel_error / 0.25)
         track_ang_vel_z_exp = torch.exp(-ang_vel_error / 0.25)
         lin_vel_z_l2 = torch.square(base_lin_vel[:, 2])
@@ -121,8 +141,10 @@ class ANYmalDManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
         action_rate_l2 = torch.sum(torch.square(self.obs_last_action - rollout_action), dim=1)
         if foot_contact is not None:
             first_contact = (self.current_contact_time > 0.0) * (self.current_contact_time < (self.step_dt + 1.0e-8))
-            feet_air_time = torch.sum((self.last_air_time - 0.5) * first_contact, dim=1) * (torch.norm(self.base_velocity[:, :2], dim=1) > 0.1)
-            
+            feet_air_time = torch.sum((self.last_air_time - 0.5) * first_contact, dim=1) * (
+                torch.norm(self.base_velocity[:, :2], dim=1) > 0.1
+            )
+
             is_contact = foot_contact.bool()
             is_first_contact = (self.current_air_time > 0) * is_contact
             is_first_detached = (self.current_contact_time > 0) * ~is_contact
@@ -131,20 +153,22 @@ class ANYmalDManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
                 self.current_air_time + self.step_dt,
                 self.last_air_time,
             )
-            self.current_air_time = torch.where(
-                ~is_contact, self.current_air_time + self.step_dt, 0.0
-            )
+            self.current_air_time = torch.where(~is_contact, self.current_air_time + self.step_dt, 0.0)
             self.last_contact_time = torch.where(
                 is_first_detached,
                 self.current_contact_time + self.step_dt,
                 self.last_contact_time,
             )
-            self.current_contact_time = torch.where(
-                is_contact, self.current_contact_time + self.step_dt, 0.0
-            )
+            self.current_contact_time = torch.where(is_contact, self.current_contact_time + self.step_dt, 0.0)
         else:
             feet_air_time = torch.zeros(self.num_imagination_envs, device=self.device)
-        undesired_contacts = torch.sum(thigh_contact, dim=1) if thigh_contact is not None else torch.zeros(self.num_imagination_envs, device=self.device)
+        undesired_contacts = (
+            torch.sum(thigh_contact, dim=1)
+            if thigh_contact is not None
+            else torch.zeros(self.num_imagination_envs, device=self.device)
+        )
+        # 这里的 joint_pos 是相对默认位姿（joint_pos_rel），因此 abs 越大表示姿态越偏离常态。
+        joint_pos_posture = torch.sum(torch.abs(joint_pos), dim=1)
         stand_still = torch.sum(torch.abs(joint_pos), dim=1) * (torch.norm(self.base_velocity, dim=1) < 0.05)
         flat_orientation_l2 = torch.sum(torch.square(projected_gravity[:, :2]), dim=1)
         dof_pos_limits = torch.zeros(self.num_imagination_envs, device=self.device)
@@ -158,9 +182,25 @@ class ANYmalDManagerBasedMBRLEnv(ManagerBasedMBRLEnv):
             "action_rate_l2": action_rate_l2,
             "feet_air_time": feet_air_time,
             "undesired_contacts": undesired_contacts,
+            "joint_pos_posture": joint_pos_posture,
             "stand_still": stand_still,
             "flat_orientation_l2": flat_orientation_l2,
             "dof_pos_limits": dof_pos_limits,
         }
-        last_obs = torch.cat([base_lin_vel, base_ang_vel, projected_gravity, self.base_velocity, joint_pos, joint_vel, rollout_action], dim=1)
-        self.last_obs = TensorDict({"policy": last_obs}, batch_size=[self.num_imagination_envs], device=self.device)
+        last_obs = torch.cat(
+            [
+                base_lin_vel,
+                base_ang_vel,
+                projected_gravity,
+                self.base_velocity,
+                joint_pos,
+                joint_vel,
+                rollout_action,
+            ],
+            dim=1,
+        )
+        self.last_obs = TensorDict(
+            {"policy": last_obs},
+            batch_size=[self.num_imagination_envs],
+            device=self.device,
+        )

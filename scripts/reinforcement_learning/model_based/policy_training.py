@@ -1,13 +1,19 @@
-from __future__ import annotations
+"""策略训练循环封装。
 
-from rsl_rl.algorithms import PPO
-from envs.base import BaseEnv
+封装 rollout 收集、PPO 更新、日志统计与检查点保存。
+"""
+
+from __future__ import annotations
 
 import os
 import statistics
 import time
 import torch
 from collections import deque
+
+from envs.base import BaseEnv
+from rsl_rl.algorithms import PPO
+
 import wandb
 
 
@@ -22,7 +28,7 @@ class PolicyTraining:
         save_interval=200,
         max_iterations=1000,
         export_dir=None,
-        ):
+    ):
         self.env = env
         self.alg = alg
         self.device = device
@@ -53,7 +59,7 @@ class PolicyTraining:
         lenbuffer = deque(maxlen=100)
         cur_reward_sum = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
         cur_episode_length = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
-        
+
         start_iter = self.current_learning_iteration
         tot_iter = start_iter + self.max_iterations
         for it in range(start_iter, tot_iter):
@@ -62,15 +68,31 @@ class PolicyTraining:
             epistemic_uncertainty = torch.zeros(self.num_steps_per_env, device=self.device)
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
-                    if self.env.system_dynamics.architecture_config["type"] in ["rnn", "rssm"] and self.env.common_step_counter > 0:
+                    if (
+                        self.env.system_dynamics.architecture_config["type"] in ["rnn", "rssm"]
+                        and self.env.common_step_counter > 0
+                    ):
                         state_history = state_history[:, -1:]
                         action_history = action_history[:, -1:]
                     imagination_obs = self.env.get_imagination_observation(state_history, action_history)
                     imagination_actions = self.alg.act(imagination_obs)
-                    imagination_obs, imagination_rewards, imagination_dones, imagination_extras, state_history, action_history, uncertainty = self.env.imagination_step(imagination_actions, state_history, action_history)
-                    self.alg.process_env_step(imagination_obs, imagination_rewards, imagination_dones, imagination_extras)
+                    (
+                        imagination_obs,
+                        imagination_rewards,
+                        imagination_dones,
+                        imagination_extras,
+                        state_history,
+                        action_history,
+                        uncertainty,
+                    ) = self.env.imagination_step(imagination_actions, state_history, action_history)
+                    self.alg.process_env_step(
+                        imagination_obs,
+                        imagination_rewards,
+                        imagination_dones,
+                        imagination_extras,
+                    )
                     epistemic_uncertainty[i] = uncertainty.mean(dim=0)
-                    
+
                     if self.log_dir is not None:
                         if "episode" in imagination_extras:
                             ep_infos.append(imagination_extras["episode"])
@@ -91,11 +113,13 @@ class PolicyTraining:
                 # logs
                 num_valid_imagination_envs = self.alg.storage.valid_env_mask.sum()
                 epistemic_uncertainty = epistemic_uncertainty.mean(dim=0)
-                
-                self.log_dict.update({
-                    "Imagination/epistemic_uncertainty": epistemic_uncertainty,
-                    "Imagination/num_valid_imagination_envs": num_valid_imagination_envs,
-                    })
+
+                self.log_dict.update(
+                    {
+                        "Imagination/epistemic_uncertainty": epistemic_uncertainty,
+                        "Imagination/num_valid_imagination_envs": num_valid_imagination_envs,
+                    }
+                )
 
                 imagination_critic_obs = imagination_obs
                 self.alg.compute_returns(imagination_critic_obs)
@@ -139,50 +163,45 @@ class PolicyTraining:
                     infotensor = torch.cat((infotensor, ep_info[key].to(self.device)))
                 value = torch.mean(infotensor)
                 # log to logger and terminal
-                self.log_dict.update({
-                    f"Imagination/{key}": value
-                })
+                self.log_dict.update({f"Imagination/{key}": value})
                 ep_string += f"""{f'Mean episode {key}:':>{pad}} {value:.4f}\n"""
 
         mean_std = self.alg.policy.std.mean()
         fps = int(self.num_steps_per_env * self.env.num_envs / (locs["collection_time"] + locs["learn_time"]))
-        
 
         # -- Losses
         for key, value in locs["loss_dict"].items():
-            self.log_dict.update({
-                f"Loss/{key}": value
-                })
-        self.log_dict.update({
-            "Loss/policy_learning_rate": self.alg.learning_rate,
-            # -- Policy
-            "Policy/mean_noise_std": mean_std.item(),
-            # -- Performance
-            "Perf/total_fps": fps,
-            "Perf/collection time": locs["collection_time"],
-            "Perf/learning_time": locs["learn_time"],
-            })
-        if self.alg.rnd:
-            self.log_dict.update({
-                "Loss/rnd": locs["mean_rnd_loss"]
-                })
-        if self.alg.symmetry:
-            self.log_dict.update({
-                "Loss/symmetry": locs["mean_symmetry_loss"]
-                })
-        
-        # -- Training
-        if len(locs["rewbuffer"]) > 0:
-            self.log_dict.update({
-                "Train/mean_reward": statistics.mean(locs["rewbuffer"]),
-                "Train/mean_episode_length": statistics.mean(locs["lenbuffer"]),
+            self.log_dict.update({f"Loss/{key}": value})
+        self.log_dict.update(
+            {
                 "Loss/policy_learning_rate": self.alg.learning_rate,
+                # -- Policy
                 "Policy/mean_noise_std": mean_std.item(),
+                # -- Performance
                 "Perf/total_fps": fps,
                 "Perf/collection time": locs["collection_time"],
                 "Perf/learning_time": locs["learn_time"],
-                })
-        
+            }
+        )
+        if self.alg.rnd:
+            self.log_dict.update({"Loss/rnd": locs["mean_rnd_loss"]})
+        if self.alg.symmetry:
+            self.log_dict.update({"Loss/symmetry": locs["mean_symmetry_loss"]})
+
+        # -- Training
+        if len(locs["rewbuffer"]) > 0:
+            self.log_dict.update(
+                {
+                    "Train/mean_reward": statistics.mean(locs["rewbuffer"]),
+                    "Train/mean_episode_length": statistics.mean(locs["lenbuffer"]),
+                    "Loss/policy_learning_rate": self.alg.learning_rate,
+                    "Policy/mean_noise_std": mean_std.item(),
+                    "Perf/total_fps": fps,
+                    "Perf/collection time": locs["collection_time"],
+                    "Perf/learning_time": locs["learn_time"],
+                }
+            )
+
         wandb.log(self.log_dict)
 
         str = f" \033[1m Learning iteration {locs['it']}/{locs['tot_iter']} \033[0m "

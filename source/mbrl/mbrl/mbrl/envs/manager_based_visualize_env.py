@@ -3,34 +3,47 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+"""管理式可视化环境基类。
+
+将真实环境与想象环境配对同步，用于对比可视化动力学展开效果。
+"""
+
 # needed to import for allowing type-hinting: np.ndarray | None
 from __future__ import annotations
 
 import torch
 
 from isaaclab.envs.common import VecEnvStepReturn
+
 from .manager_based_mbrl_env import ManagerBasedMBRLEnv, ManagerBasedRLEnvCfg
 
 
 class ManagerBasedVisualizeEnv(ManagerBasedMBRLEnv):
-    
-    
     def __init__(self, cfg: ManagerBasedRLEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
         self.env_ids_real = torch.arange(0, self.num_envs, 2, device=self.device)
         self.env_ids_imagination = torch.arange(1, self.num_envs, 2, device=self.device)
 
-        
     def init_imagination_history(self, history_horizon):
-        self.imagination_state_history = torch.zeros(self.num_envs // 2, history_horizon, self.observation_manager.group_obs_dim["system_state"][0], device=self.device)
-        self.imagination_action_history = torch.zeros(self.num_envs // 2, history_horizon, self.observation_manager.group_obs_dim["system_action"][0], device=self.device)
-        
-    
+        self.imagination_state_history = torch.zeros(
+            self.num_envs // 2,
+            history_horizon,
+            self.observation_manager.group_obs_dim["system_state"][0],
+            device=self.device,
+        )
+        self.imagination_action_history = torch.zeros(
+            self.num_envs // 2,
+            history_horizon,
+            self.observation_manager.group_obs_dim["system_action"][0],
+            device=self.device,
+        )
+
     def _sync_imagination_history(self, env_ids_real):
         self.imagination_state_history[env_ids_real // 2] = 0.0
         self.imagination_action_history[env_ids_real // 2] = 0.0
-        self.imagination_state_history[env_ids_real // 2, -1] = self.imagination_state_normalizer(self.observation_manager.compute()["system_state"])[env_ids_real]
-
+        self.imagination_state_history[env_ids_real // 2, -1] = self.imagination_state_normalizer(
+            self.observation_manager.compute()["system_state"]
+        )[env_ids_real]
 
     def step(self, action: torch.Tensor) -> VecEnvStepReturn:
         """Execute one time-step of the environment's dynamics and reset terminated environments.
@@ -114,22 +127,40 @@ class ManagerBasedVisualizeEnv(ManagerBasedMBRLEnv):
             self._sync_imagination_history(env_ids_real)
 
         # return observations, rewards, resets and extras
-        return self.obs_buf, self.reward_buf, self.reset_terminated, self.reset_time_outs, self.extras
-
+        return (
+            self.obs_buf,
+            self.reward_buf,
+            self.reset_terminated,
+            self.reset_time_outs,
+            self.extras,
+        )
 
     def _update_imagination_envs(self, action):
         self.num_imagination_envs = len(self.env_ids_imagination)
         rollout_action = action[self.env_ids_imagination]
-        self.imagination_action_history = torch.cat([self.imagination_action_history[:, 1:].clone(), self.imagination_action_normalizer(rollout_action).unsqueeze(1)], dim=1)
+        self.imagination_action_history = torch.cat(
+            [
+                self.imagination_action_history[:, 1:].clone(),
+                self.imagination_action_normalizer(rollout_action).unsqueeze(1),
+            ],
+            dim=1,
+        )
         if self.system_dynamics.architecture_config["type"] in ["rnn", "rssm"]:
             self.imagination_state_history = self.imagination_state_history[:, -1].unsqueeze(1)
             self.imagination_action_history = self.imagination_action_history[:, -1].unsqueeze(1)
-        imagination_states, *_ = self.system_dynamics.forward(self.imagination_state_history, self.imagination_action_history)
+        imagination_states, *_ = self.system_dynamics.forward(
+            self.imagination_state_history, self.imagination_action_history
+        )
         imagination_states_denormalized = self.imagination_state_normalizer.inverse(imagination_states)
         parsed_imagination_states = self._parse_imagination_states(imagination_states_denormalized)
         self._reset_imagination_sim(parsed_imagination_states)
-        self.imagination_state_history = torch.cat([self.imagination_state_history[:, 1:].clone(), imagination_states.unsqueeze(1)], dim=1)
-
+        self.imagination_state_history = torch.cat(
+            [
+                self.imagination_state_history[:, 1:].clone(),
+                imagination_states.unsqueeze(1),
+            ],
+            dim=1,
+        )
 
     def _reset_imagination_sim(self, parsed_imagination_states):
         raise NotImplementedError

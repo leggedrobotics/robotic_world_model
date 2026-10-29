@@ -1,5 +1,10 @@
-from dataclasses import dataclass, asdict, field
-from typing import List, Dict
+"""离线训练基础配置。
+
+定义实验、环境、数据、模型与策略训练的通用参数结构。
+"""
+
+from dataclasses import asdict, dataclass, field
+from typing import Dict, List
 
 
 @dataclass
@@ -10,7 +15,7 @@ class BaseConfig:
     class ExperimentConfig:
         environment: str = "dummy"
         device: str = "cuda"
-        
+
         def to_dict(self):
             return asdict(self)
 
@@ -24,12 +29,12 @@ class BaseConfig:
         observation_noise: bool = True
         command_resample_interval_range: List[int] | None = None
         event_interval_range: List[int] | None = None
-        
+
         def to_dict(self):
             return asdict(self)
-    
+
     @dataclass
-    class DataConfig:       
+    class DataConfig:
         dataset_root: str = "logs/online"
         dataset_folder: str = "train"
         file_data_size: int = 10000
@@ -48,24 +53,26 @@ class BaseConfig:
 
         def to_dict(self):
             return asdict(self)
-        
+
     @dataclass
     class ModelArchitectureConfig:
-        history_horizon: int = 1 # the window size of the input state transitions
-        forecast_horizon: int = 1 # the autoregressive prediction steps
+        history_horizon: int = 1  # the window size of the input state transitions
+        forecast_horizon: int = 1  # the autoregressive prediction steps
         extension_dim: int = 0
         contact_dim: int = 0
         termination_dim: int = 0
         ensemble_size: int = 1
-        architecture_config: Dict[str, object] = field(default_factory=lambda: {
-            "type": "mlp",
-            "base_shape": [256, 256],
-            "state_mean_shape": [128],
-            "state_logstd_shape": [128],
-            "extension_shape": [128],
-            "contact_shape": [128],
-            "termination_shape": [128],
-        })
+        architecture_config: Dict[str, object] = field(
+            default_factory=lambda: {
+                "type": "mlp",
+                "base_shape": [256, 256],
+                "state_mean_shape": [128],
+                "state_logstd_shape": [128],
+                "extension_shape": [128],
+                "contact_shape": [128],
+                "termination_shape": [128],
+            }
+        )
         # architecture_config: Dict[str, object] = field(default_factory=lambda: {
         #     "type": "rnn",
         #     "rnn_type": "gru",
@@ -82,7 +89,7 @@ class BaseConfig:
 
         def to_dict(self):
             return asdict(self)
-    
+
     @dataclass
     class PolicyArchitectureConfig:
         observation_dim: int = 0
@@ -121,7 +128,7 @@ class BaseConfig:
         save_interval: int = 200
         max_iterations: int = 500
         export_dir: str | None = None
-        
+
         def to_dict(self):
             return asdict(self)
 

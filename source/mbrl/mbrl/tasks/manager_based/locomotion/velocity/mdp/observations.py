@@ -1,37 +1,32 @@
+"""速度任务自定义观测项。
+
+提供姿态/机身高度相关观测函数，供任务配置与终止条件复用。
+"""
+
 from __future__ import annotations
 
 import torch
 from typing import TYPE_CHECKING
 
-import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.managers import SceneEntityCfg
-from isaaclab.managers.manager_base import ManagerTermBase
-from isaaclab.managers.manager_term_cfg import ObservationTermCfg
-from isaaclab.sensors import Camera, Imu, RayCaster, RayCasterCamera, TiledCamera
 
 if TYPE_CHECKING:
-    from isaaclab.envs import ManagerBasedEnv, ManagerBasedRLEnv
+    from isaaclab.envs import ManagerBasedEnv
 
-from isaaclab.envs.utils.io_descriptors import (
-    generic_io_descriptor,
-    record_body_names,
-    record_dtype,
-    record_joint_names,
-    record_joint_pos_offsets,
-    record_joint_vel_offsets,
-    record_shape,
-)
+from isaaclab.envs.utils.io_descriptors import generic_io_descriptor, record_body_names, record_dtype, record_shape
 
 
-@generic_io_descriptor(
-    observation_type="RootState", on_inspect=[record_shape, record_dtype]
-)
-def over_orientation(env: ManagerBasedEnv, limit_angle: float, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+@generic_io_descriptor(observation_type="RootState", on_inspect=[record_shape, record_dtype])
+def over_orientation(
+    env: ManagerBasedEnv,
+    limit_angle: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
     """Bad orientation.
-    
+
     Note: This function is typically used as a termination condition.
-    
+
     Args:
         env: The environment.
         limit_angle: The limit angle in radians.
@@ -45,7 +40,10 @@ def over_orientation(env: ManagerBasedEnv, limit_angle: float, asset_cfg: SceneE
     return torch.acos(-asset.data.projected_gravity_b[:, 2]).abs().unsqueeze(-1) > limit_angle
 
 
-@generic_io_descriptor(observation_type="BodyState", on_inspect=[record_shape, record_dtype, record_body_names])
+@generic_io_descriptor(
+    observation_type="BodyState",
+    on_inspect=[record_shape, record_dtype, record_body_names],
+)
 def body_height_w(
     env: ManagerBasedEnv,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
@@ -66,7 +64,10 @@ def body_height_w(
     return asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
 
 
-@generic_io_descriptor(observation_type="BodyState", on_inspect=[record_shape, record_dtype, record_body_names])
+@generic_io_descriptor(
+    observation_type="BodyState",
+    on_inspect=[record_shape, record_dtype, record_body_names],
+)
 def body_lin_vel_w_norm(
     env: ManagerBasedEnv,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),

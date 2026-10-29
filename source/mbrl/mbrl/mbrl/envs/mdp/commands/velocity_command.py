@@ -11,12 +11,11 @@ import torch
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from isaaclab.markers import VisualizationMarkers, CUBOID_MARKER_CFG
 from isaaclab.envs.mdp.commands.velocity_command import UniformVelocityCommand
+from isaaclab.markers import CUBOID_MARKER_CFG, VisualizationMarkers
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
-
     from isaaclab.envs.mdp.commands.commands_cfg import UniformVelocityCommandCfg
 
 
@@ -24,7 +23,7 @@ class UniformVelocityCommand_Visualize(UniformVelocityCommand):
     def __init__(self, cfg: UniformVelocityCommandCfg, env: ManagerBasedEnv):
         super().__init__(cfg, env)
         self.env = env
-        
+
     def _resample_command(self, env_ids: Sequence[int]):
         # intersect the reset envs with only the real envs
         uniques, counts = torch.cat([env_ids, self.env.env_ids_real]).unique(return_counts=True)
@@ -38,7 +37,6 @@ class UniformVelocityCommand_Visualize(UniformVelocityCommand):
             self.is_heading_env[env_ids + 1] = self.is_heading_env[env_ids].clone()
         # update standing envs
         self.is_standing_env[env_ids + 1] = self.is_standing_env[env_ids].clone()
-
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         super()._set_debug_vis_impl(debug_vis)
@@ -59,7 +57,6 @@ class UniformVelocityCommand_Visualize(UniformVelocityCommand):
             if hasattr(self, "real_visualizer"):
                 self.real_visualizer.set_visibility(False)
                 self.imagination_visualizer.set_visibility(False)
-    
 
     def _debug_vis_callback(self, event):
         super()._debug_vis_callback(event)
@@ -73,7 +70,6 @@ class UniformVelocityCommand_Visualize(UniformVelocityCommand):
 
 
 class SampleUniformVelocityCommand(UniformVelocityCommand):
-    
     def sample_command(self, num_envs: int):
         # sample velocity commands
         r = torch.empty(num_envs, device=self.device)
@@ -85,4 +81,3 @@ class SampleUniformVelocityCommand(UniformVelocityCommand):
         # -- ang vel yaw - rotation around z
         vel_command_b[:, 2] = r.uniform_(*self.cfg.ranges.ang_vel_z)
         return vel_command_b
-

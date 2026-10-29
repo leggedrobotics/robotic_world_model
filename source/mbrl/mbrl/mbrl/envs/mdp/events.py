@@ -54,7 +54,7 @@ def reset_root_state_uniform_visualize(
     rand_samples = math_utils.sample_uniform(ranges[:, 0], ranges[:, 1], (len(env_ids), 6), device=asset.device)
 
     velocities = root_states[:, 7:13] + rand_samples
-    
+
     env_ids = torch.vstack([env_ids, env_ids + 1]).T.flatten()
     positions = torch.repeat_interleave(positions, 2, dim=0) + env.scene.env_origins[env_ids]
     orientations = torch.repeat_interleave(orientations, 2, dim=0)
@@ -120,11 +120,11 @@ def reset_joints_by_scale_visualize(
     # clamp joint vel to limits
     joint_vel_limits = asset.data.soft_joint_vel_limits[env_ids]
     joint_vel = joint_vel.clamp_(-joint_vel_limits, joint_vel_limits)
-    
+
     env_ids = torch.vstack([env_ids, env_ids + 1]).T.flatten()
     joint_pos = torch.repeat_interleave(joint_pos, 2, dim=0)
     joint_vel = torch.repeat_interleave(joint_vel, 2, dim=0)
-    
+
     # set into the physics simulation
     asset.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
